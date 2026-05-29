@@ -1,7 +1,5 @@
 export const A4_W = 210
 export const A4_H = 297
-export const A4_PX_300_W = 2480
-export const A4_PX_300_H = 3508
 
 export const PAGE_SIZES = {
   A4: { w: 210, h: 297, label: 'A4' },
@@ -16,11 +14,11 @@ export function getPageDims(sizeKey, orientation) {
   return orientation === 'landscape' ? { w: s.h, h: s.w } : { w: s.w, h: s.h }
 }
 
-export function pxAt300dpi(mm) {
-  return Math.round(mm / 25.4 * 300)
+export function pxAtDpi(mm, dpi) {
+  return Math.round(mm / 25.4 * dpi)
 }
 
-export function computeGrid(imageW, imageH, rows, cols, pageW = A4_W, pageH = A4_H) {
+export function computeGrid(imageW, imageH, rows, cols, pageW = A4_W, pageH = A4_H, alignOffX = 0, alignOffY = 0) {
   const gW = cols * pageW
   const gH = rows * pageH
   const gAspect = gW / gH
@@ -29,8 +27,8 @@ export function computeGrid(imageW, imageH, rows, cols, pageW = A4_W, pageH = A4
   const scale = iAspect > gAspect ? gH / imageH : gW / imageW
   const sW = imageW * scale
   const sH = imageH * scale
-  const oX = (gW - sW) / 2
-  const oY = (gH - sH) / 2
+  const oX = (gW - sW) / 2 + alignOffX
+  const oY = (gH - sH) / 2 + alignOffY
 
   return { gridW: gW, gridH: gH, scale, scaledW: sW, scaledH: sH, offX: oX, offY: oY }
 }
