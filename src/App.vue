@@ -1,8 +1,8 @@
 <template>
-  <div class="app">
+  <div class="app" tabindex="-1" @keydown="onKey">
     <header class="app-header">
       <h1>Poster Splitter</h1>
-      <span class="subtitle">Split any image into A4 pages for large-format printing</span>
+      <span class="subtitle">Split any image into pages for large-format printing</span>
     </header>
 
     <div class="app-body">
@@ -18,9 +18,13 @@
           :rows="rows"
           :cols="cols"
           :overlap="overlap"
+          :page-size="pageSize"
+          :orientation="orientation"
           @update:rows="rows = $event"
           @update:cols="cols = $event"
           @update:overlap="overlap = $event"
+          @update:page-size="pageSize = $event"
+          @update:orientation="orientation = $event"
         />
 
         <div class="sidebar-actions">
@@ -40,6 +44,11 @@
           <span>{{ imageInfo.width }} &times; {{ imageInfo.height }} px</span>
           <span>{{ (imageInfo.width / imageInfo.height).toFixed(2) }} aspect</span>
         </div>
+
+        <div class="shortcuts-hint">
+          <span><kbd>R</kbd> reset view</span>
+          <span><kbd>0</kbd> fit zoom</span>
+        </div>
       </aside>
 
       <main class="main">
@@ -48,6 +57,8 @@
           :rows="rows"
           :cols="cols"
           :overlap="overlap"
+          :page-w="pageDims.w"
+          :page-h="pageDims.h"
         />
 
         <PageThumbnails
@@ -55,6 +66,8 @@
           :rows="rows"
           :cols="cols"
           :overlap="overlap"
+          :page-w="pageDims.w"
+          :page-h="pageDims.h"
           @download-png="downloadPagePNG"
           @download-pdf="downloadPagePDF"
           @download-all-png="downloadAllPNG"
@@ -67,17 +80,18 @@
     <div v-if="loading" class="loading-overlay">
       <div class="spinner"></div>
       <span>{{ loadingText }}</span>
+      <span v-if="downloadProgress" class="progress-text">{{ downloadProgress }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import FileUpload from './components/FileUpload.vue'
 import GridControls from './components/GridControls.vue'
 import CanvasPreview from './components/CanvasPreview.vue'
 import PageThumbnails from './components/PageThumbnails.vue'
-import { A4_PX_300_W, A4_PX_300_H, computeGrid, extractCanvas } from './utils/geometry.js'
+import { A4_PX_300_W, A4_PX_300_H, computeGrid, extractCanvas, getPageDims } from './utils/geometry.js'
 import { downloadPNG, downloadPDF, downloadAllZIP, downloadMergedPDF } from './utils/downloader.js'
 
 const file = ref(null)
@@ -85,19 +99,24 @@ const image = ref(null)
 const rows = ref(3)
 const cols = ref(3)
 const overlap = ref(0)
+const pageSize = ref('A4')
+const orientation = ref('portrait')
 const imageInfo = ref({ width: 0, height: 0, name: '' })
 const loading = ref(false)
 const loadingText = ref('')
+const downloadProgress = ref('')
 
 const fileInfo = ref('')
+
+const pageDims = computed(() => getPageDims(pageSize.value, orientation.value))
 
 async function onFile(f) {
   file.value = f
   loading.value = true
-  loadingText.value = 'Loading…'
+  loadingText.value = 'Loading\u2026'
   try {
     if (f.type === 'application/pdf') {
-      loadingText.value = 'Rendering PDF…'
+      loadingText.value = 'Rendering PDF\u2026'
       await loadPDF(f)
     } else if (f.type.startsWith('image/')) {
       await loadImage(f)
@@ -122,7 +141,7 @@ function loadImage(file) {
       img.onload = () => {
         image.value = img
         imageInfo.value = { width: img.width, height: img.height, name: file.name }
-        fileInfo.value = `${img.width} × ${img.height} px`
+        fileInfo.value = `${img.width} \u00d7 ${img.height} px`
         resolve()
       }
       img.onerror = () => reject(new Error('Invalid image file'))
@@ -160,7 +179,7 @@ async function loadPDF(file) {
 
   image.value = img
   imageInfo.value = { width: img.width, height: img.height, name: file.name }
-  fileInfo.value = `PDF → ${img.width} × ${img.height} px`
+  fileInfo.value = `PDF \u2192 ${img.width} \u00d7 ${img.height} px`
 }
 
 function resetFile() {
@@ -177,41 +196,77 @@ function prefix() {
 
 function extractAll() {
   if (!image.value) return []
-  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value)
+  const { w, h } = pageDims.value
+  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value, w, h)
+  const tW = Math.round(w / 25.4 * 300)
+  const tH = Math.round(h / 25.4 * 300)
   const result = []
   for (let r = 0; r < rows.value; r++)
     for (let c = 0; c < cols.value; c++)
-      result.push(extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, A4_PX_300_W, A4_PX_300_H))
+      result.push(extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, tW, tH, w, h))
   return result.filter(Boolean)
 }
 
 async function downloadPagePNG(i) {
-  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value)
+  const { w, h } = pageDims.value
+  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value, w, h)
   const r = Math.floor(i / cols.value), c = i % cols.value
-  const canvas = extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, A4_PX_300_W, A4_PX_300_H)
+  const tW = Math.round(w / 25.4 * 300)
+  const tH = Math.round(h / 25.4 * 300)
+  const canvas = extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, tW, tH, w, h)
   if (canvas) downloadPNG(canvas, `${prefix()}_p${i + 1}.png`)
 }
 
 async function downloadPagePDF(i) {
-  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value)
+  const { w, h } = pageDims.value
+  const geom = computeGrid(image.value.width, image.value.height, rows.value, cols.value, w, h)
   const r = Math.floor(i / cols.value), c = i % cols.value
-  const canvas = extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, A4_PX_300_W, A4_PX_300_H)
-  if (canvas) downloadPDF(canvas, `${prefix()}_p${i + 1}.pdf`)
+  const tW = Math.round(w / 25.4 * 300)
+  const tH = Math.round(h / 25.4 * 300)
+  const canvas = extractCanvas(image.value, r, c, rows.value, cols.value, overlap.value, geom, tW, tH, w, h)
+  if (canvas) downloadPDF(canvas, `${prefix()}_p${i + 1}.pdf`, w, h)
 }
 
 async function downloadAllPNG() {
   const all = extractAll()
-  if (all.length) await downloadAllZIP(all, prefix(), 'png')
+  if (all.length) {
+    loading.value = true
+    loadingText.value = 'Generating PNGs\u2026'
+    downloadProgress.value = ''
+    await downloadAllZIP(all, prefix(), 'png')
+    loading.value = false
+  }
 }
 
 async function downloadAllPDF() {
   const all = extractAll()
-  if (all.length) await downloadAllZIP(all, prefix(), 'pdf')
+  if (all.length) {
+    loading.value = true
+    loadingText.value = 'Generating PDFs\u2026'
+    downloadProgress.value = ''
+    const { w, h } = pageDims.value
+    await downloadAllZIP(all, prefix(), 'pdf', w, h)
+    loading.value = false
+  }
 }
 
 async function downloadMerged() {
   const all = extractAll()
-  if (all.length) await downloadMergedPDF(all, prefix())
+  if (all.length) {
+    loading.value = true
+    loadingText.value = 'Generating merged PDF\u2026'
+    downloadProgress.value = ''
+    const { w, h } = pageDims.value
+    await downloadMergedPDF(all, prefix(), w, h)
+    loading.value = false
+  }
+}
+
+function onKey(e) {
+  if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault()
+    window.dispatchEvent(new CustomEvent('reset-view'))
+  }
 }
 </script>
 
@@ -250,6 +305,7 @@ body {
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
+  outline: none;
 }
 .app-header {
   padding: 12px 20px;
@@ -315,6 +371,23 @@ body {
   color: var(--muted);
   text-align: center;
 }
+.shortcuts-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+.shortcuts-hint kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-family: inherit;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
 .main {
   flex: 1;
   display: flex;
@@ -336,6 +409,10 @@ body {
   z-index: 100;
   color: #fff;
   font-size: 14px;
+}
+.progress-text {
+  font-size: 12px;
+  opacity: 0.8;
 }
 .spinner {
   width: 32px;

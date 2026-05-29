@@ -4,4 +4,5 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   base: '/split-printer/',
   plugins: [vue()],
+  build: { outDir: 'docs' },
 })

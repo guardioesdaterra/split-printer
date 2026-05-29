@@ -13,21 +13,21 @@ export function downloadPNG(canvas, name) {
   })
 }
 
-export function downloadPDF(canvas, name) {
+export function downloadPDF(canvas, name, pageW = A4_W, pageH = A4_H) {
   const d = canvas.toDataURL('image/png')
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
-  pdf.addImage(d, 'PNG', 0, 0, A4_W, A4_H)
+  const pdf = new jsPDF({ unit: 'mm', format: [pageW, pageH] })
+  pdf.addImage(d, 'PNG', 0, 0, pageW, pageH)
   pdf.save(name)
 }
 
-export async function downloadAllZIP(canvases, prefix, ext) {
+export async function downloadAllZIP(canvases, prefix, ext, pageW = A4_W, pageH = A4_H) {
   const zip = new JSZip()
   for (let i = 0; i < canvases.length; i++) {
     const c = canvases[i]
     if (ext === 'pdf') {
       const d = c.toDataURL('image/png')
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
-      pdf.addImage(d, 'PNG', 0, 0, A4_W, A4_H)
+      const pdf = new jsPDF({ unit: 'mm', format: [pageW, pageH] })
+      pdf.addImage(d, 'PNG', 0, 0, pageW, pageH)
       zip.file(`${prefix}_p${i + 1}.pdf`, pdf.output('arraybuffer'))
     } else {
       const b = await new Promise(r => c.toBlob(r))
@@ -35,15 +35,15 @@ export async function downloadAllZIP(canvases, prefix, ext) {
     }
   }
   const blob = await zip.generateAsync({ type: 'blob' })
-  saveAs(blob, `${prefix}_all.${ext === 'pdf' ? 'zip' : 'zip'}`)
+  saveAs(blob, `${prefix}_all.zip`)
 }
 
-export async function downloadMergedPDF(canvases, prefix) {
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+export async function downloadMergedPDF(canvases, prefix, pageW = A4_W, pageH = A4_H) {
+  const pdf = new jsPDF({ unit: 'mm', format: [pageW, pageH] })
   for (let i = 0; i < canvases.length; i++) {
     if (i > 0) pdf.addPage()
     const d = canvases[i].toDataURL('image/png')
-    pdf.addImage(d, 'PNG', 0, 0, A4_W, A4_H)
+    pdf.addImage(d, 'PNG', 0, 0, pageW, pageH)
   }
   pdf.save(`${prefix}_merged.pdf`)
 }

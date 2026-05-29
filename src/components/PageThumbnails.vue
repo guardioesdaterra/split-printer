@@ -24,16 +24,16 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
-import { A4_H, A4_W, computeGrid, extractCanvas } from '../utils/geometry.js'
+import { A4_W, A4_H, computeGrid, extractCanvas } from '../utils/geometry.js'
 
-const props = defineProps({ image: Object, rows: Number, cols: Number, overlap: Number })
+const props = defineProps({ image: Object, rows: Number, cols: Number, overlap: Number, pageW: { type: Number, default: A4_W }, pageH: { type: Number, default: A4_H } })
 defineEmits(['download-png', 'download-pdf', 'download-all-png', 'download-all-pdf', 'download-merged'])
 
 const total = computed(() => props.rows * props.cols)
 const hasImage = computed(() => !!props.image && total.value > 0)
 
 const TW = 160
-const TH = Math.round(TW * (A4_H / A4_W))
+const TH = computed(() => Math.round(TW * (props.pageH / props.pageW)))
 const canvasRefs = ref([])
 
 function setRef(i, el) {
@@ -42,13 +42,14 @@ function setRef(i, el) {
 
 function render() {
   if (!props.image || total.value === 0) return
-  const geom = computeGrid(props.image.width, props.image.height, props.rows, props.cols)
+  const geom = computeGrid(props.image.width, props.image.height, props.rows, props.cols, props.pageW, props.pageH)
   for (let i = 0; i < total.value; i++) {
     const canvas = canvasRefs.value[i]
     if (!canvas) continue
     const r = Math.floor(i / props.cols)
     const c = i % props.cols
-    const src = extractCanvas(props.image, r, c, props.rows, props.cols, props.overlap, geom, TW, TH)
+    const th = TH.value
+    const src = extractCanvas(props.image, r, c, props.rows, props.cols, props.overlap, geom, TW, th, props.pageW, props.pageH)
     if (src) {
       canvas.width = src.width
       canvas.height = src.height
@@ -58,7 +59,7 @@ function render() {
   }
 }
 
-watch(() => [props.image, props.rows, props.cols, props.overlap], () => nextTick(render), { deep: false })
+watch(() => [props.image, props.rows, props.cols, props.overlap, props.pageW, props.pageH], () => nextTick(render), { deep: false })
 </script>
 
 <style scoped>
